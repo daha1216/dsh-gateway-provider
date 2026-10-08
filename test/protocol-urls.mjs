@@ -48,6 +48,15 @@ check("trailing slashes tolerated",
 check("all empty → undefined",
 	deriveProtocolURLs({ openaiURL: "", responsesURL: "", anthropicURL: "" }),
 	undefined);
+// ---- prerelease version segments (/v1beta, /v2alpha, …) ----
+// A Gemini-native gateway serves under /v1beta; discovery must strip that
+// segment instead of stacking its own /v1 onto it (/v1beta/v1/models 404s).
+check("openai URL with /v1beta base kept for the SDK, stripped for discovery",
+	deriveProtocolURLs({ openaiURL: "https://x.com/v1beta/chat/completions" }),
+	{ apiBases: { "openai-completions": "https://x.com/v1beta" }, availableTypes: ["openai"], catalogBase: "https://x.com" });
+check("responses URL with /v2alpha base kept, catalog base bare",
+	deriveProtocolURLs({ responsesURL: "https://r.io/v2alpha/responses" }),
+	{ apiBases: { "openai-responses": "https://r.io/v2alpha" }, availableTypes: ["openai-response"], catalogBase: "https://r.io" });
 check("no fields → undefined", deriveProtocolURLs({}), undefined);
 check("null → undefined", deriveProtocolURLs(null), undefined);
 
@@ -138,6 +147,9 @@ check("plain config still falls back to the public cloud",
 		await probe({ baseURL: `http://127.0.0.1:${port}/v1` }, "versioned base hits /v1/models once (issue #3)", "/v1/models");
 		await probe({ baseURL: `http://127.0.0.1:${port}/v1/` }, "trailing slash + version tolerated", "/v1/models");
 		await probe({ baseURL: `http://127.0.0.1:${port}/v2` }, "other version segments stripped too", "/v1/models");
+		await probe({ baseURL: `http://127.0.0.1:${port}/v1beta` }, "prerelease segment /v1beta stripped for discovery (no /v1beta/v1/models)", "/v1/models");
+		await probe({ baseURL: `http://127.0.0.1:${port}/v1beta/` }, "trailing slash + /v1beta tolerated", "/v1/models");
+		await probe({ gateways: [{ id: "extra", baseURL: `http://127.0.0.1:${port}/v1beta` }] }, "gateways[] entry with /v1beta base hits /v1/models", "/v1/models");
 		await probe({ baseURL: `http://127.0.0.1:${port}/v1`, catalogMode: "management" }, "management mode with versioned base hits /api/user/models (issue #3)", "/api/user/models");
 		await probe({ gateways: [{ id: "extra", baseURL: `http://127.0.0.1:${port}/v1` }] }, "gateways[] entry with versioned base hits /v1/models (issue #3)", "/v1/models");
 	} finally {
